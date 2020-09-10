@@ -44,7 +44,7 @@ func (cc *ClusterConfig) initGCloudCmdSet() (*cmdSet, error) {
 	gcloudCmds := newCmdSet(cc, "gcloud")
 
 	cmds := []Command{
-		Command{
+		{
 			name:    "check-gcloud-login",
 			rootCmd: "gcloud",
 			args:    []string{"config", "list", "--format", "json"},
@@ -80,13 +80,13 @@ func (cc *ClusterConfig) initGCloudCmdSet() (*cmdSet, error) {
 				return nil
 			},
 		},
-		Command{
+		{
 			name:     "gcloud-login",
 			rootCmd:  "gcloud",
 			args:     []string{"auth", "login"},
 			internal: true,
 		},
-		Command{
+		{
 			name:    "list-gcloud-accounts",
 			rootCmd: "gcloud",
 			args:    []string{"projects", "list", "--filter", "lifecycleState:ACTIVE", "--format", "json"},
@@ -123,7 +123,7 @@ func (cc *ClusterConfig) initGCloudCmdSet() (*cmdSet, error) {
 				return nil
 			},
 		},
-		Command{
+		{
 			name:    "create-storage-bucket-soucecode",
 			rootCmd: "gsutil",
 			args:    []string{"mb", "-c", "COLDLINE", "gs://" + cc.getStorageOpts().SourceCodeBucket},
@@ -131,70 +131,12 @@ func (cc *ClusterConfig) initGCloudCmdSet() (*cmdSet, error) {
 				return nil
 			},
 		},
-		Command{
+		{
 			name:    "create-storage-bucket-cloudbuild-logs",
 			rootCmd: "gsutil",
 			args:    []string{"mb", "-c", "COLDLINE", "gs://" + cc.getStorageOpts().CloudBuildBucket},
 		},
-		Command{
-			name:    "create-kubernetes-cluster",
-			rootCmd: "gcloud",
-			generateArgs: func(cc *ClusterConfig) []string {
-				return []string{
-					"container", "clusters", "create", cc.Name,
-					"--zone", cc.Zone,
-					"--no-enable-basic-auth",
-					"--cluster-version", "1.15.12-gke.2",
-					"--machine-type", "n1-standard-1",
-					"--image-type", "COS",
-					"--disk-type", "pd-standard",
-					"--disk-size=10",
-					"--scopes",
-					"https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append,https://www.googleapis.com/auth/ndev.clouddns.readwrite",
-					"--preemptible",
-					"--num-nodes=2",
-					"--network", fmt.Sprintf("projects/%s/global/networks/default", cc.GcloudProjectName),
-					"--subnetwork", fmt.Sprintf("projects/%s/regions/%s/subnetworks/default", cc.GcloudProjectName, cc.Region),
-					"--addons", "HorizontalPodAutoscaling,HttpLoadBalancing",
-					"--enable-autoupgrade",
-					"--enable-autorepair",
-				}
-			},
-			internal: true,
-		},
-		Command{
-			name:    "get-kubernetes-credentials",
-			rootCmd: "gcloud",
-			generateArgs: func(cc *ClusterConfig) []string {
-				return []string{
-					"container", "clusters", "get-credentials",
-					cc.Name,
-					"--zone", cc.Zone,
-					"--project", cc.GcloudProjectName,
-				}
-			},
-		},
-		// Note: When running on GKE (Google Kubernetes Engine),
-		// you may encounter a ‘permission denied’ error when creating some of these resources.
-		// This is a nuance of the way GKE handles RBAC and IAM permissions,
-		// and as such you should ‘elevate’ your own privileges to that of a ‘cluster-admin’ before running the above command.
-		// If you have already run the above command, you should run them again after elevating your permissions:
-		//
-		//		kubectl create clusterrolebinding cluster-admin-binding \
-		//    --clusterrole=cluster-admin \
-		//    --user=$(gcloud config get-value core/account)
-		//
-		Command{
-			name:    "gke-cluster-admin-role",
-			rootCmd: "kubectl",
-			generateArgs: func(cc *ClusterConfig) []string {
-				return []string{
-					"create", "clusterrolebinding", "cluster-admin-binding", "--clusterrole=cluster-admin",
-					fmt.Sprintf("--user=%s", cc.Account),
-				}
-			},
-		},
-		Command{
+		{
 			name:    "list-dns-server",
 			rootCmd: "gcloud",
 			generateArgs: func(cc *ClusterConfig) []string {
@@ -206,7 +148,7 @@ func (cc *ClusterConfig) initGCloudCmdSet() (*cmdSet, error) {
 			},
 			internal: true,
 		},
-		Command{
+		{
 			name:    "create-dns-zone",
 			rootCmd: "gcloud",
 			generateArgs: func(cc *ClusterConfig) []string {
@@ -270,5 +212,85 @@ func printDNSServers(gcs *cmdSet, cc *ClusterConfig) error {
 	}
 
 	fmt.Println(DNSServerAddrs)
+	return nil
+}
+
+func CreateServiceAccount(name string) error {
+	cmd := Command{
+		name:    "create-service-account",
+		rootCmd: "gcloud",
+		args: []string{
+			"iam",
+			"service-accounts",
+			"create",
+			name,
+			"--display-name",
+			name,
+		},
+	}
+
+	cmd.execute(context.Background(), nil)
+	if !cmd.succeed {
+		return cmd.stderr
+	}
+
+	return nil
+}
+
+func BindServiceAccToBucket(serviceAccount, bucket, permission string) error {
+	cmd := Command{
+		name:    "bind-service-account-to-bucket",
+		rootCmd: "gsutil",
+		args: []string{
+			"iam", "ch", "serviceAccount:" + serviceAccount + ":" + permission,
+			"gs://" + bucket,
+		},
+	}
+
+	cmd.execute(context.Background(), nil)
+	if !cmd.succeed {
+		return cmd.stderr
+	}
+
+	return nil
+}
+
+func BindServiceAccountToRole(gcloudProject, serviceAccount, role string) error {
+	cmd := Command{
+		name:    "bind-service-account",
+		rootCmd: "gcloud",
+		args: []string{
+			"projects",
+			"add-iam-policy-binding",
+			gcloudProject,
+			"--member",
+			"serviceAccount:" + serviceAccount,
+			"--role", role,
+		},
+	}
+
+	cmd.execute(context.Background(), nil)
+	if !cmd.succeed {
+		return cmd.stderr
+	}
+
+	return nil
+}
+
+func GenerateServiceAccountKey(serviceAccount, path string) error {
+	cmd := Command{
+		name:    "generate-service-account-keys",
+		rootCmd: "gcloud",
+		args: []string{
+			"iam", "service-accounts", "keys", "create",
+			"--iam-account", serviceAccount,
+			path,
+		},
+	}
+
+	cmd.execute(context.Background(), nil)
+	if !cmd.succeed {
+		return cmd.stderr
+	}
 	return nil
 }

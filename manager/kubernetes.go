@@ -1,17 +1,18 @@
 package manager
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
-	"strings"
+	"text/template"
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/urvil38/kmanager/config"
 	kh "github.com/urvil38/kmanager/http"
-	"github.com/urvil38/kmanager/utils"
 )
 
 type KubeApp struct {
@@ -35,33 +36,119 @@ type Metadata struct {
 func (cc *ClusterConfig) initKubeCmdSet() (*cmdSet, error) {
 	kubernetesCmds := newCmdSet(cc, "kubernetes")
 
+	cmds := []Command{
+		{
+			name:    "create-kubernetes-cluster",
+			rootCmd: "gcloud",
+			generateArgs: func(cc *ClusterConfig) []string {
+				return []string{
+					"container", "clusters", "create", cc.Name,
+					"--zone", cc.Zone,
+					"--no-enable-basic-auth",
+					"--cluster-version", "1.15.12-gke.2",
+					"--machine-type", "n1-standard-1",
+					"--image-type", "COS",
+					"--disk-type", "pd-standard",
+					"--disk-size=10",
+					"--scopes",
+					"https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append,https://www.googleapis.com/auth/ndev.clouddns.readwrite",
+					"--preemptible",
+					"--num-nodes=2",
+					"--network", fmt.Sprintf("projects/%s/global/networks/default", cc.GcloudProjectName),
+					"--subnetwork", fmt.Sprintf("projects/%s/regions/%s/subnetworks/default", cc.GcloudProjectName, cc.Region),
+					"--addons", "HorizontalPodAutoscaling,HttpLoadBalancing",
+					"--enable-autoupgrade",
+					"--enable-autorepair",
+				}
+			},
+		},
+		{
+			name:    "get-kubernetes-credentials",
+			rootCmd: "gcloud",
+			generateArgs: func(cc *ClusterConfig) []string {
+				return []string{
+					"container", "clusters", "get-credentials",
+					cc.Name,
+					"--zone", cc.Zone,
+					"--project", cc.GcloudProjectName,
+				}
+			},
+		},
+		// Note: When running on GKE (Google Kubernetes Engine),
+		// you may encounter a ‘permission denied’ error when creating some of these resources.
+		// This is a nuance of the way GKE handles RBAC and IAM permissions,
+		// and as such you should ‘elevate’ your own privileges to that of a ‘cluster-admin’ before running the above command.
+		// If you have already run the above command, you should run them again after elevating your permissions:
+		//
+		//		kubectl create clusterrolebinding cluster-admin-binding \
+		//    --clusterrole=cluster-admin \
+		//    --user=$(gcloud config get-value core/account)
+		//
+		{
+			name:    "gke-cluster-admin-role",
+			rootCmd: "kubectl",
+			generateArgs: func(cc *ClusterConfig) []string {
+				return []string{
+					"create", "clusterrolebinding", "cluster-admin-binding", "--clusterrole=cluster-admin",
+					fmt.Sprintf("--user=%s", cc.Account),
+				}
+			},
+		},
+	}
+
+	for _, cmd := range cmds {
+		kubernetesCmds.AddCmd(cmd)
+	}
+
+	return kubernetesCmds, nil
+}
+
+func (cc *ClusterConfig) generateCertManagerSecret() error {
+	createCmd := Command{
+		name:    "cert-manager-clouddns-secert",
+		rootCmd: "kubectl",
+		generateArgs: func(cc *ClusterConfig) []string {
+			return []string{
+				"create", "secret", "generic", cc.getServiceAccountOpts().DNSName, fmt.Sprintf("--namespace=%s", "cert-manager"), fmt.Sprintf("--from-file=%s=%s", cc.getServiceAccountOpts().DNSName, filepath.Join(cc.ConfPath, cc.getServiceAccountOpts().DNSName+".json")),
+			}
+		},
+	}
+
+	createCmd.execute(context.Background(), cc)
+	if !createCmd.succeed {
+		return createCmd.stderr
+	}
+	return nil
+}
+
+func (cc *ClusterConfig) configKubernetes() error {
 	c := kh.NewHTTPClient(nil)
 
 	kmangerIndexReq, err := http.NewRequest(http.MethodGet, "https://storage.googleapis.com/kmanager/index.yaml", nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	res, err := c.Do(kmangerIndexReq)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	defer res.Body.Close()
 
 	index, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	err = yaml.Unmarshal(index, &cc.KubeAppConfig)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	kConfigDir, err := utils.GetConfigPath(cc.Name)
+	kConfigDir, err := config.GetConfigPath(cc.Name)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, app := range cc.KubeAppConfig.Apps {
@@ -80,18 +167,18 @@ func (cc *ClusterConfig) initKubeCmdSet() (*cmdSet, error) {
 
 		req, err := http.NewRequest(http.MethodGet, app.Path, nil)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		res, err := c.Do(req)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer res.Body.Close()
 
 		b, err := ioutil.ReadAll(res.Body)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		cData := cc.valueFromTemplate(app, string(b))
@@ -99,17 +186,16 @@ func (cc *ClusterConfig) initKubeCmdSet() (*cmdSet, error) {
 		configFilePath := filepath.Join(kConfigDir, fmt.Sprintf("%s.yaml", app.Name))
 		err = ioutil.WriteFile(configFilePath, []byte(cData), 0777)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		err = cc.kubectlRunAndWait(configFilePath)
 		if err != nil {
 			continue
 		}
-
 	}
 
-	return kubernetesCmds, nil
+	return nil
 }
 
 func (cc *ClusterConfig) kubectlRunAndWait(filePath string) error {
@@ -119,8 +205,10 @@ func (cc *ClusterConfig) kubectlRunAndWait(filePath string) error {
 		args: []string{
 			"wait",
 			"--for=condition=Ready",
-			"-f",
-			filePath,
+			"--timeout=20s",
+			"pods",
+			"--all",
+			"--all-namespaces=true",
 		},
 	}
 	applyCmd := Command{
@@ -145,34 +233,76 @@ func (cc *ClusterConfig) kubectlRunAndWait(filePath string) error {
 }
 
 type externalDNSCfg struct {
-	Domain  string
-	Project string
-	owner   string
+	DomainName  string
+	ProjectName string
+	Email       string
+}
+
+type clusterIssuerCfg struct {
+	Email                string
+	ProjectName          string
+	ServiceAccountSecret string
+	SecretFileKey        string
 }
 
 func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) string {
 	switch app.Name {
 	case "externalDNS":
 		ec := externalDNSCfg{
-			Domain:  cc.DNSName,
-			Project: cc.GcloudProjectName,
-			owner:   cc.Account,
+			DomainName:  cc.DNSName,
+			ProjectName: cc.GcloudProjectName,
+			Email:       cc.Account,
 		}
-		return generateExternalDNSKubeConfig(ec, templateData)
+		cnf, err := generateExternalDNSKubeConfig(ec, templateData)
+		if err != nil {
+			fmt.Println("err:", err)
+			return ""
+		}
+		return cnf
 	case "cluster-issuer":
-		return generateClusterIssuerConfig(cc.Account, templateData)
+		ci := clusterIssuerCfg{
+			Email:                cc.Account,
+			ProjectName:          cc.GcloudProjectName,
+			ServiceAccountSecret: cc.getServiceAccountOpts().DNSName,
+			SecretFileKey:        cc.getServiceAccountOpts().DNSName,
+		}
+		_ = cc.generateCertManagerSecret()
+		cnf, err := generateClusterIssuerConfig(ci, templateData)
+		if err != nil {
+			fmt.Println("err:", err)
+			return ""
+		}
+		return cnf
 	}
 	return templateData
 }
 
-func generateExternalDNSKubeConfig(ec externalDNSCfg, templateData string) string {
-	templateData = strings.Replace(templateData, "{{domain_name}}", ec.Domain, -1)
-	templateData = strings.Replace(templateData, "{{project_name}}", ec.Project, -1)
-	templateData = strings.Replace(templateData, "{{owner_id}}", ec.owner, -1)
-	return templateData
+func generateExternalDNSKubeConfig(ec externalDNSCfg, tmpl string) (string, error) {
+	t, err := template.New("tmpl").Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	err = t.Execute(&buf, ec)
+	if err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }
 
-func generateClusterIssuerConfig(email string, templateData string) string {
-	templateData = strings.Replace(templateData, "{{email}}", email, -1)
-	return templateData
+func generateClusterIssuerConfig(ci clusterIssuerCfg, tmpl string) (string, error) {
+	t, err := template.New("tmpl").Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	err = t.Execute(&buf, ci)
+	if err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }
