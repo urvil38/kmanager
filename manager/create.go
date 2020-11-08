@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"path/filepath"
 
@@ -55,7 +56,7 @@ func (c *Cluster) Create() error {
 		if !cmd.internal {
 			cmd.execute(context.Background(), c.Cc)
 			if !cmd.succeed {
-				// fmt.Println(cmd.stderr)
+				fmt.Println(cmd.stderr)
 				continue
 			}
 		}
@@ -94,11 +95,14 @@ func (c *Cluster) Create() error {
 	return nil
 }
 
-func (m *Cluster) generateConfig() error {
-	b, err := json.MarshalIndent(m.Cc, "", "    ")
+func (c *Cluster) generateConfig() error {
+	b, err := json.MarshalIndent(c.Cc, "", "    ")
 	if err != nil {
 		return err
 	}
-	fmt.Print(string(b))
+	err = ioutil.WriteFile(filepath.Join(c.Cc.ConfPath, "config.json"), b, 0600)
+	if err != nil {
+		return err
+	}
 	return nil
 }

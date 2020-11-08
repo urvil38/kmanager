@@ -45,7 +45,7 @@ func (cc *ClusterConfig) initKubeCmdSet() (*cmdSet, error) {
 					"container", "clusters", "create", cc.Name,
 					"--zone", cc.Zone,
 					"--no-enable-basic-auth",
-					"--cluster-version", "1.15.12-gke.2",
+					"--cluster-version", "1.16.13-gke.401",
 					"--machine-type", "n1-standard-1",
 					"--image-type", "COS",
 					"--disk-type", "pd-standard",
@@ -103,13 +103,13 @@ func (cc *ClusterConfig) initKubeCmdSet() (*cmdSet, error) {
 	return kubernetesCmds, nil
 }
 
-func (cc *ClusterConfig) generateCertManagerSecret() error {
+func (cc *ClusterConfig) createSecret(name, namespace, filepath string) error {
 	createCmd := Command{
-		name:    "cert-manager-clouddns-secert",
+		name:    name,
 		rootCmd: "kubectl",
 		generateArgs: func(cc *ClusterConfig) []string {
 			return []string{
-				"create", "secret", "generic", cc.getServiceAccountOpts().DNSName, fmt.Sprintf("--namespace=%s", "cert-manager"), fmt.Sprintf("--from-file=%s=%s", cc.getServiceAccountOpts().DNSName, filepath.Join(cc.ConfPath, cc.getServiceAccountOpts().DNSName+".json")),
+				"create", "secret", "generic", name, fmt.Sprintf("--namespace=%s", namespace), fmt.Sprintf("--from-file=%s=%s", name, filepath),
 			}
 		},
 	}
@@ -133,7 +133,6 @@ func (cc *ClusterConfig) configKubernetes() error {
 	if err != nil {
 		return err
 	}
-
 	defer res.Body.Close()
 
 	index, err := ioutil.ReadAll(res.Body)
@@ -181,7 +180,11 @@ func (cc *ClusterConfig) configKubernetes() error {
 			return err
 		}
 
-		cData := cc.valueFromTemplate(app, string(b))
+		cData, err := cc.valueFromTemplate(app, string(b))
+		if err != nil {
+			fmt.Print("err:", err)
+			return err
+		}
 
 		configFilePath := filepath.Join(kConfigDir, fmt.Sprintf("%s.yaml", app.Name))
 		err = ioutil.WriteFile(configFilePath, []byte(cData), 0777)
@@ -232,6 +235,21 @@ func (cc *ClusterConfig) kubectlRunAndWait(filePath string) error {
 	return nil
 }
 
+func (cc *ClusterConfig) createNamespace(name string) error {
+	nsCmd := Command{
+		name:    "create-kubernetes-namespace",
+		rootCmd: "kubectl",
+		args:    []string{"create", "ns", name},
+	}
+
+	nsCmd.execute(context.Background(), cc)
+	if !nsCmd.succeed {
+		//fmt.Println(nsCmd.stderr)
+		return nsCmd.stderr
+	}
+	return nil
+}
+
 type externalDNSCfg struct {
 	DomainName  string
 	ProjectName string
@@ -245,7 +263,14 @@ type clusterIssuerCfg struct {
 	SecretFileKey        string
 }
 
-func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) string {
+type generatorCfg struct {
+	Port          string
+	Image         string
+	ClusterIssuer string
+	DNSName       string
+}
+
+func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) (string, error) {
 	switch app.Name {
 	case "externalDNS":
 		ec := externalDNSCfg{
@@ -255,10 +280,9 @@ func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) string 
 		}
 		cnf, err := generateExternalDNSKubeConfig(ec, templateData)
 		if err != nil {
-			fmt.Println("err:", err)
-			return ""
+			return "", err
 		}
-		return cnf
+		return cnf, nil
 	case "cluster-issuer":
 		ci := clusterIssuerCfg{
 			Email:                cc.Account,
@@ -266,15 +290,53 @@ func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) string 
 			ServiceAccountSecret: cc.getServiceAccountOpts().DNSName,
 			SecretFileKey:        cc.getServiceAccountOpts().DNSName,
 		}
-		_ = cc.generateCertManagerSecret()
+		_ = cc.createSecret(
+			cc.getServiceAccountOpts().DNSName,
+			"cert-manager",
+			filepath.Join(cc.ConfPath, cc.getServiceAccountOpts().DNSName+".json"),
+		)
 		cnf, err := generateClusterIssuerConfig(ci, templateData)
 		if err != nil {
-			fmt.Println("err:", err)
-			return ""
+			return "", err
 		}
-		return cnf
+		return cnf, nil
+	case "generator":
+		gn := generatorCfg{
+			Port:          "3000",
+			Image:         "gcr.io/kubepaas-261611/generator:1.0.0",
+			ClusterIssuer: "letsencrypt-prod",
+			DNSName:       "generator." + cc.DNSName,
+		}
+		err := cc.createNamespace("generator")
+		if err != nil {
+			fmt.Println("err:",err)
+		}
+
+		err = cc.createSecret(
+			"cloudbuild-secret",
+			"generator",
+			filepath.Join(cc.ConfPath, cc.getServiceAccountOpts().CloudBuildName+".json"),
+		)
+		if err != nil {
+			fmt.Println("err:",err)
+		}
+
+		err = cc.createSecret(
+			"cloudstorage-secret",
+			"generator",
+			filepath.Join(cc.ConfPath, cc.getServiceAccountOpts().StorageName+".json"),
+		)
+		if err != nil {
+			fmt.Println("err:",err)
+		}
+		
+		cnf, err := generateGeneratorConfig(gn, templateData)
+		if err != nil {
+			return "", err
+		}
+		return cnf, nil
 	}
-	return templateData
+	return templateData, nil
 }
 
 func generateExternalDNSKubeConfig(ec externalDNSCfg, tmpl string) (string, error) {
@@ -300,6 +362,21 @@ func generateClusterIssuerConfig(ci clusterIssuerCfg, tmpl string) (string, erro
 
 	var buf bytes.Buffer
 	err = t.Execute(&buf, ci)
+	if err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
+}
+
+func generateGeneratorConfig(gn generatorCfg, tmpl string) (string, error) {
+	t, err := template.New("tmpl").Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	err = t.Execute(&buf, gn)
 	if err != nil {
 		return "", err
 	}

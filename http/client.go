@@ -9,17 +9,17 @@ import (
 
 func NewHTTPClient(timeout *time.Duration) *http.Client {
 	if timeout != nil {
-		httpTransport := &http.Transport{
+		t := &http.Transport{
 			Dial: (&net.Dialer{
-				Timeout: 10 * time.Second,
+				Timeout: *timeout,
 			}).Dial,
-			TLSHandshakeTimeout: 10 * time.Second,
+			TLSHandshakeTimeout: *timeout,
 			MaxIdleConns:        5,
-			IdleConnTimeout:     10 * time.Second,
+			IdleConnTimeout:     *timeout,
 			TLSClientConfig:     &tls.Config{InsecureSkipVerify: false},
 		}
 		return &http.Client{
-			Transport: httpTransport,
+			Transport: t,
 			Timeout:   *timeout,
 		}
 	}

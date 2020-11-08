@@ -78,7 +78,7 @@ type cmdSet struct {
 func (cs *cmdSet) AddCmd(cmd Command) error {
 	_, isthere := cs.cmdMap[cmd.name]
 	if isthere {
-		log.Fatal("Command redefined!!")
+		log.Fatal(cmd.name, ": command redefined!!")
 	}
 
 	cs.cmdMap[cmd.name] = cmd

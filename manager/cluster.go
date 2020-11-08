@@ -1,12 +1,20 @@
 package manager
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/urvil38/kmanager/config"
 )
 
 const (
 	serviceAccountFmt = `%s@%s.iam.gserviceaccount.com`
+	storageBucketFmt  = `gs://%s`
 )
 
 type ClusterConfig struct {
@@ -66,4 +74,29 @@ func (cc *ClusterConfig) getServiceAccountOpts() ServiceAccount {
 	}
 	cc.ServiceAccount = s
 	return s
+}
+
+func getClusterConfig(name string) (ClusterConfig, error) {
+	var cc ClusterConfig
+
+	configFilePath, err := config.ClusterConfigPath(name)
+	if err != nil {
+		return cc, err
+	}
+
+	if _, err := os.Stat(filepath.Join(configFilePath, "config.json")); errors.Is(err, os.ErrNotExist) {
+		return cc, err
+	}
+
+	b, err := ioutil.ReadFile(filepath.Join(configFilePath, "config.json"))
+	if err != nil {
+		return cc, err
+	}
+
+	err = json.Unmarshal(b, &cc)
+	if err != nil {
+		return cc, err
+	}
+
+	return cc, nil
 }
