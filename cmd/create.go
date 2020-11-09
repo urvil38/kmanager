@@ -15,11 +15,11 @@ var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new kubepaas cluster",
 	Run: func(cmd *cobra.Command, args []string) {
-		m := manager.Cluster{
+		c := manager.Cluster{
 			Cc:        new(manager.ClusterConfig),
 			CreatedAt: time.Now(),
 		}
-		err := m.Create()
+		err := c.Create()
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)

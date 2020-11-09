@@ -63,7 +63,7 @@ func (cc *ClusterConfig) getStorageOpts() Storage {
 func (cc *ClusterConfig) getServiceAccountOpts() ServiceAccount {
 	cloudBuildSaName := fmt.Sprintf("%s-%s", cc.Name, "cloudbuild")
 	storageSaName := fmt.Sprintf("%s-%s", cc.Name, "storage")
-	clouddnsSaName := fmt.Sprintf("%s-%s", cc.Name, "cert-manager-clouddns")
+	clouddnsSaName := fmt.Sprintf("%s-%s", cc.Name, "cert-clouddns")
 	s := ServiceAccount{
 		CloudBuildName: cloudBuildSaName,
 		CloudBuild:     fmt.Sprintf(serviceAccountFmt, cloudBuildSaName, cc.GcloudProjectName),

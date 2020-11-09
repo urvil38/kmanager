@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"text/template"
+	"time"
 
 	"gopkg.in/yaml.v2"
 
@@ -192,7 +193,7 @@ func (cc *ClusterConfig) configKubernetes() error {
 			return err
 		}
 
-		err = cc.kubectlRunAndWait(configFilePath)
+		err = cc.kubectlRunAndWait(configFilePath, app.Name)
 		if err != nil {
 			continue
 		}
@@ -201,7 +202,7 @@ func (cc *ClusterConfig) configKubernetes() error {
 	return nil
 }
 
-func (cc *ClusterConfig) kubectlRunAndWait(filePath string) error {
+func (cc *ClusterConfig) kubectlRunAndWait(filePath string, appName string) error {
 	waitCmd := Command{
 		name:    "wait-for-kubernetes-resources",
 		rootCmd: "kubectl",
@@ -214,14 +215,46 @@ func (cc *ClusterConfig) kubectlRunAndWait(filePath string) error {
 			"--all-namespaces=true",
 		},
 	}
+
 	applyCmd := Command{
 		name:    "create-kubernetes-resources",
 		rootCmd: "kubectl",
 		args:    []string{"create", "-f", filePath},
 		runFn: func(cmd *Command) error {
-			waitCmd.execute(context.Background(), cc)
 			if !cmd.succeed {
 				return cmd.stderr
+			}
+
+			if appName == "wildcard-cert" {
+				checkCmd := Command{
+					name:    "check-kubernetes-secret",
+					rootCmd: "kubectl",
+					args: []string{
+						"get",
+						"secret",
+						"wildcard-cert-secret",
+					},
+				}
+				timer := time.NewTimer(5 * time.Minute)
+			outer:
+				for {
+					select {
+					case <-timer.C:
+						timer.Stop()
+						fmt.Println("timeout: kubectl get secret wildcard-cert-secret")
+						break outer
+					default:
+						checkCmd.execute(context.Background(), cc)
+						if !checkCmd.succeed {
+							//fmt.Print(checkCmd.stderr)
+							time.Sleep(5 * time.Second)
+							continue
+						}
+						break outer
+					}
+				}
+			} else {
+				waitCmd.execute(context.Background(), cc)
 			}
 			return nil
 		},
@@ -251,9 +284,10 @@ func (cc *ClusterConfig) createNamespace(name string) error {
 }
 
 type externalDNSCfg struct {
-	DomainName  string
-	ProjectName string
-	Email       string
+	IngressControllerService string
+	DomainName               string
+	ProjectName              string
+	Email                    string
 }
 
 type clusterIssuerCfg struct {
@@ -263,22 +297,42 @@ type clusterIssuerCfg struct {
 	SecretFileKey        string
 }
 
+type wildCardCertCfg struct {
+	DNSName string
+}
+
 type generatorCfg struct {
 	Port          string
 	Image         string
 	ClusterIssuer string
 	DNSName       string
+	Envs          []Env
+}
+
+type Env struct {
+	Name  string
+	Value string
 }
 
 func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) (string, error) {
 	switch app.Name {
 	case "externalDNS":
 		ec := externalDNSCfg{
-			DomainName:  cc.DNSName,
-			ProjectName: cc.GcloudProjectName,
-			Email:       cc.Account,
+			IngressControllerService: "ingress-controller-nginx-ingress",
+			DomainName:               cc.DNSName,
+			ProjectName:              cc.GcloudProjectName,
+			Email:                    cc.Account,
 		}
-		cnf, err := generateExternalDNSKubeConfig(ec, templateData)
+		cnf, err := generateKubeAppConfigFromTemplate(ec, templateData)
+		if err != nil {
+			return "", err
+		}
+		return cnf, nil
+	case "wildcard-cert":
+		wc := wildCardCertCfg{
+			DNSName: "*." + cc.DNSName,
+		}
+		cnf, err := generateKubeAppConfigFromTemplate(wc, templateData)
 		if err != nil {
 			return "", err
 		}
@@ -295,7 +349,7 @@ func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) (string
 			"cert-manager",
 			filepath.Join(cc.ConfPath, cc.getServiceAccountOpts().DNSName+".json"),
 		)
-		cnf, err := generateClusterIssuerConfig(ci, templateData)
+		cnf, err := generateKubeAppConfigFromTemplate(ci, templateData)
 		if err != nil {
 			return "", err
 		}
@@ -306,10 +360,44 @@ func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) (string
 			Image:         "gcr.io/kubepaas-261611/generator:1.0.0",
 			ClusterIssuer: "letsencrypt-prod",
 			DNSName:       "generator." + cc.DNSName,
+			Envs: []Env{
+				{
+					Name:  "FLASK_ENV",
+					Value: "production",
+				},
+				{
+					Name:  "GCP_PROJECT",
+					Value: cc.GcloudProjectName,
+				},
+				{
+					Name:  "SOURCE_BUCKET",
+					Value: cc.Storage.SourceCodeBucket,
+				},
+				{
+					Name:  "CLOUDBUILD_BUCKET",
+					Value: cc.Storage.CloudBuildBucket,
+				},
+				{
+					Name:  "ISSUER_NAME",
+					Value: "letsencrypt-prod",
+				},
+				{
+					Name:  "CLUSTER_NAME",
+					Value: cc.Name,
+				},
+				{
+					Name:  "COMPUTE_ZONE",
+					Value: cc.Zone,
+				},
+				{
+					Name:  "DNS_NAME",
+					Value: cc.DNSName,
+				},
+			},
 		}
 		err := cc.createNamespace("generator")
 		if err != nil {
-			fmt.Println("err:",err)
+			fmt.Println("err:", err)
 		}
 
 		err = cc.createSecret(
@@ -318,7 +406,7 @@ func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) (string
 			filepath.Join(cc.ConfPath, cc.getServiceAccountOpts().CloudBuildName+".json"),
 		)
 		if err != nil {
-			fmt.Println("err:",err)
+			fmt.Println("err:", err)
 		}
 
 		err = cc.createSecret(
@@ -327,10 +415,10 @@ func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) (string
 			filepath.Join(cc.ConfPath, cc.getServiceAccountOpts().StorageName+".json"),
 		)
 		if err != nil {
-			fmt.Println("err:",err)
+			fmt.Println("err:", err)
 		}
-		
-		cnf, err := generateGeneratorConfig(gn, templateData)
+
+		cnf, err := generateKubeAppConfigFromTemplate(gn, templateData)
 		if err != nil {
 			return "", err
 		}
@@ -339,44 +427,14 @@ func (cc *ClusterConfig) valueFromTemplate(app App, templateData string) (string
 	return templateData, nil
 }
 
-func generateExternalDNSKubeConfig(ec externalDNSCfg, tmpl string) (string, error) {
+func generateKubeAppConfigFromTemplate(cf interface{}, tmpl string) (string, error) {
 	t, err := template.New("tmpl").Parse(tmpl)
 	if err != nil {
 		return "", err
 	}
 
 	var buf bytes.Buffer
-	err = t.Execute(&buf, ec)
-	if err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
-}
-
-func generateClusterIssuerConfig(ci clusterIssuerCfg, tmpl string) (string, error) {
-	t, err := template.New("tmpl").Parse(tmpl)
-	if err != nil {
-		return "", err
-	}
-
-	var buf bytes.Buffer
-	err = t.Execute(&buf, ci)
-	if err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
-}
-
-func generateGeneratorConfig(gn generatorCfg, tmpl string) (string, error) {
-	t, err := template.New("tmpl").Parse(tmpl)
-	if err != nil {
-		return "", err
-	}
-
-	var buf bytes.Buffer
-	err = t.Execute(&buf, gn)
+	err = t.Execute(&buf, cf)
 	if err != nil {
 		return "", err
 	}
