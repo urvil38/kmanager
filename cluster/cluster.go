@@ -1,4 +1,4 @@
-package manager
+package cluster
 
 import (
 	"encoding/json"
@@ -7,17 +7,16 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/urvil38/kmanager/config"
 )
 
 const (
-	serviceAccountFmt = `%s@%s.iam.gserviceaccount.com`
-	storageBucketFmt  = `gs://%s`
+	ServiceAccountFmt = `%s@%s.iam.gserviceaccount.com`
+	StorageBucketFmt  = `gs://%s`
 )
 
-type ClusterConfig struct {
+type Cluster struct {
 	Name              string         `json:"cluster_name" survey:"clusterName"`
 	GcloudProjectName string         `json:"project_name" survey:"project"`
 	Account           string         `json:"account"`
@@ -45,41 +44,53 @@ type ServiceAccount struct {
 	DNS            string `json:"clouddns_serviceaccount"`
 }
 
-type Cluster struct {
-	Cc        *ClusterConfig
-	CreatedAt time.Time
-	UpdatedAt time.Time
+type KubeApp struct {
+	APIVersion string   `yaml:"apiVersion"`
+	Kind       string   `yaml:"kind"`
+	Metadata   Metadata `yaml:"metadata"`
+	Apps       []App    `yaml:"apps"`
 }
 
-func (cc *ClusterConfig) getStorageOpts() Storage {
+type App struct {
+	Deprecated bool   `yaml:"deprecated"`
+	Path       string `yaml:"path"`
+	Name       string `yaml:"name"`
+}
+
+type Metadata struct {
+	Name    string `yaml:"name"`
+	Version string `yaml:"version"`
+}
+
+func (c *Cluster) GetStorageOpts() Storage {
 	s := Storage{
-		CloudBuildBucket: fmt.Sprintf("%s-%s", cc.Name, "cloudbuild-logs"),
-		SourceCodeBucket: fmt.Sprintf("%s-%s", cc.Name, "sourcecode"),
+		CloudBuildBucket: fmt.Sprintf("%s-%s", c.Name, "cloudbuild-logs"),
+		SourceCodeBucket: fmt.Sprintf("%s-%s", c.Name, "sourcecode"),
 	}
-	cc.Storage = s
+	c.Storage = s
 	return s
 }
 
-func (cc *ClusterConfig) getServiceAccountOpts() ServiceAccount {
-	cloudBuildSaName := fmt.Sprintf("%s-%s", cc.Name, "cloudbuild")
-	storageSaName := fmt.Sprintf("%s-%s", cc.Name, "storage")
-	clouddnsSaName := fmt.Sprintf("%s-%s", cc.Name, "cert-clouddns")
+func (c *Cluster) GetServiceAccountOpts() ServiceAccount {
+	cloudBuildSaName := fmt.Sprintf("%s-%s", c.Name, "cloudbuild")
+	storageSaName := fmt.Sprintf("%s-%s", c.Name, "storage")
+	clouddnsSaName := fmt.Sprintf("%s-%s", c.Name, "cert-clouddns")
 	s := ServiceAccount{
 		CloudBuildName: cloudBuildSaName,
-		CloudBuild:     fmt.Sprintf(serviceAccountFmt, cloudBuildSaName, cc.GcloudProjectName),
+		CloudBuild:     fmt.Sprintf(ServiceAccountFmt, cloudBuildSaName, c.GcloudProjectName),
 		StorageName:    storageSaName,
-		Storage:        fmt.Sprintf(serviceAccountFmt, storageSaName, cc.GcloudProjectName),
+		Storage:        fmt.Sprintf(ServiceAccountFmt, storageSaName, c.GcloudProjectName),
 		DNSName:        clouddnsSaName,
-		DNS:            fmt.Sprintf(serviceAccountFmt, clouddnsSaName, cc.GcloudProjectName),
+		DNS:            fmt.Sprintf(ServiceAccountFmt, clouddnsSaName, c.GcloudProjectName),
 	}
-	cc.ServiceAccount = s
+	c.ServiceAccount = s
 	return s
 }
 
-func getClusterConfig(name string) (ClusterConfig, error) {
-	var cc ClusterConfig
+func Get(name string) (Cluster, error) {
+	var cc Cluster
 
-	configFilePath, err := config.ClusterConfigPath(name)
+	configFilePath, err := config.ClusterPath(name)
 	if err != nil {
 		return cc, err
 	}
@@ -99,4 +110,16 @@ func getClusterConfig(name string) (ClusterConfig, error) {
 	}
 
 	return cc, nil
+}
+
+func (c Cluster) GenerateConfig() error {
+	b, err := json.MarshalIndent(c, "", "    ")
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(filepath.Join(c.ConfPath, "config.json"), b, 0600)
+	if err != nil {
+		return err
+	}
+	return nil
 }

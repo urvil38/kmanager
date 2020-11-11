@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 )
 
-func GetConfigPath(clusterName string) (string, error) {
+func CreateConfigDir(clusterName string) (string, error) {
 	confPath, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -23,7 +23,7 @@ func GetConfigPath(clusterName string) (string, error) {
 	return kConfPath, nil
 }
 
-func ClusterConfigPath(clusterName string) (string, error) {
+func ClusterPath(clusterName string) (string, error) {
 	confPath, err := os.UserConfigDir()
 	if err != nil {
 		return "", err

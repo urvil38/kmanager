@@ -32,7 +32,7 @@ var describeCmd = &cobra.Command{
 		}
 
 		name := args[0]
-		path, err := config.ClusterConfigPath(name)
+		path, err := config.ClusterPath(name)
 		if err != nil {
 			cmd.Println(err)
 			os.Exit(1)

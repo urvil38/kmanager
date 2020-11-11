@@ -1,4 +1,4 @@
-package manager
+package cluster
 
 import (
 	"context"
@@ -11,36 +11,36 @@ import (
 )
 
 type Command struct {
-	name         string
-	rootCmd      string
-	args         []string
-	stderr       error
-	stdout       string
-	internal     bool
-	succeed      bool
-	generateArgs func(cc *ClusterConfig) []string
-	runFn        func(cmd *Command) error
+	Name         string
+	RootCmd      string
+	Args         []string
+	Stderr       error
+	Stdout       string
+	Internal     bool
+	Succeed      bool
+	GenerateArgs func(cc *Cluster) []string
+	RunFn        func(cmd *Command) error
 }
 
-func (c *Command) execute(ctx context.Context, cc *ClusterConfig) {
+func (c *Command) Execute(ctx context.Context, cc *Cluster) {
 	c.reset()
-	if c.generateArgs != nil {
-		c.args = c.generateArgs(cc)
+	if c.GenerateArgs != nil {
+		c.Args = c.GenerateArgs(cc)
 	}
-	c.stdout, c.stderr = RunCommand(ctx, c.rootCmd, c.args...)
-	if c.stderr == nil {
-		c.succeed = true
+	c.Stdout, c.Stderr = RunCommand(ctx, c.RootCmd, c.Args...)
+	if c.Stderr == nil {
+		c.Succeed = true
 	}
 
-	if c.runFn != nil {
-		c.runFn(c)
+	if c.RunFn != nil {
+		c.RunFn(c)
 	}
 }
 
 func (c *Command) reset() {
-	c.succeed = false
-	c.stderr = nil
-	c.stdout = ""
+	c.Succeed = false
+	c.Stderr = nil
+	c.Stdout = ""
 }
 
 type commandNotFound struct {
@@ -51,38 +51,38 @@ func (c commandNotFound) Error() string {
 	return fmt.Sprintf("no command found of name %s", c.name)
 }
 
-func (cs *cmdSet) getCommand(cmdName string) (*Command, error) {
-	cmd, isthere := cs.cmdMap[cmdName]
+func (cs *CmdSet) GetCommand(cmdName string) (Command, error) {
+	cmd, isthere := cs.CmdMap[cmdName]
 	if !isthere {
-		return nil, commandNotFound{name: cmdName}
+		return Command{}, commandNotFound{name: cmdName}
 	}
 
-	return &cmd, nil
+	return cmd, nil
 }
 
-func newCmdSet(cc *ClusterConfig, name string) *cmdSet {
-	return &cmdSet{
-		name:   name,
-		cmdMap: make(map[string]Command),
-		cc:     cc,
+func NewCmdSet(cc *Cluster, name string) *CmdSet {
+	return &CmdSet{
+		Name:   name,
+		CmdMap: make(map[string]Command),
+		C:      cc,
 	}
 }
 
-type cmdSet struct {
-	name   string
-	cmdMap map[string]Command
-	cmds   []Command
-	cc     *ClusterConfig
+type CmdSet struct {
+	Name   string
+	CmdMap map[string]Command
+	Cmds   []Command
+	C      *Cluster
 }
 
-func (cs *cmdSet) AddCmd(cmd Command) error {
-	_, isthere := cs.cmdMap[cmd.name]
+func (cs *CmdSet) AddCmd(cmd Command) error {
+	_, isthere := cs.CmdMap[cmd.Name]
 	if isthere {
-		log.Fatal(cmd.name, ": command redefined!!")
+		log.Fatal(cmd.Name, ": command redefined!!")
 	}
 
-	cs.cmdMap[cmd.name] = cmd
-	cs.cmds = append(cs.cmds, cmd)
+	cs.CmdMap[cmd.Name] = cmd
+	cs.Cmds = append(cs.Cmds, cmd)
 
 	return nil
 }

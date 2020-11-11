@@ -1,4 +1,4 @@
-package manager
+package cluster
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/fatih/color"
 	"github.com/urvil38/kmanager/questions"
 )
 
@@ -40,60 +41,60 @@ type DNSRecords []struct {
 	Type    string   `json:"type"`
 }
 
-func (cc *ClusterConfig) initGCloudCmdSet() (*cmdSet, error) {
-	gcloudCmds := newCmdSet(cc, "gcloud")
+func (c *Cluster) InitGCloudCmdSet() (*CmdSet, error) {
+	gcloudCmds := NewCmdSet(c, "gcloud")
 
 	cmds := []Command{
 		{
-			name:    "check-gcloud-login",
-			rootCmd: "gcloud",
-			args:    []string{"config", "list", "--format", "json"},
-			runFn: func(cmd *Command) error {
-				if cmd.succeed {
+			Name:    "check-gcloud-login",
+			RootCmd: "gcloud",
+			Args:    []string{"config", "list", "--format", "json"},
+			RunFn: func(cmd *Command) error {
+				if cmd.Succeed {
 					var ga GcloudAccount
-					err := json.NewDecoder(strings.NewReader(cmd.stdout)).Decode(&ga)
+					err := json.NewDecoder(strings.NewReader(cmd.Stdout)).Decode(&ga)
 					if err != nil {
 						return err
 					}
 					if ga.Core.Account == "" {
-						loginCmd, err := gcloudCmds.getCommand("gcloud-login")
+						loginCmd, err := gcloudCmds.GetCommand("gcloud-login")
 						if err != nil {
 							return err
 						}
-						loginCmd.execute(context.Background(), cc)
-						if !loginCmd.succeed {
-							return loginCmd.stderr
+						loginCmd.Execute(context.Background(), c)
+						if !loginCmd.Succeed {
+							return loginCmd.Stderr
 						}
 					}
 					if ga.Compute.Region != "" {
-						cc.Region = ga.Compute.Region
+						c.Region = ga.Compute.Region
 					}
 					if ga.Compute.Zone != "" {
-						cc.Zone = ga.Compute.Zone
+						c.Zone = ga.Compute.Zone
 					}
 					if ga.Core.Account != "" {
-						cc.Account = ga.Core.Account
+						c.Account = ga.Core.Account
 					}
 				} else {
-					return cmd.stderr
+					return cmd.Stderr
 				}
 				return nil
 			},
 		},
 		{
-			name:     "gcloud-login",
-			rootCmd:  "gcloud",
-			args:     []string{"auth", "login"},
-			internal: true,
+			Name:     "gcloud-login",
+			RootCmd:  "gcloud",
+			Args:     []string{"auth", "login"},
+			Internal: true,
 		},
 		{
-			name:    "list-gcloud-accounts",
-			rootCmd: "gcloud",
-			args:    []string{"projects", "list", "--filter", "lifecycleState:ACTIVE", "--format", "json"},
-			runFn: func(cmd *Command) error {
-				if cmd.succeed {
+			Name:    "list-gcloud-accounts",
+			RootCmd: "gcloud",
+			Args:    []string{"projects", "list", "--filter", "lifecycleState:ACTIVE", "--format", "json"},
+			RunFn: func(cmd *Command) error {
+				if cmd.Succeed {
 					var pl ProjectList
-					err := json.NewDecoder(strings.NewReader(cmd.stdout)).Decode(&pl)
+					err := json.NewDecoder(strings.NewReader(cmd.Stdout)).Decode(&pl)
 					if err != nil {
 						return err
 					}
@@ -110,7 +111,7 @@ func (cc *ClusterConfig) initGCloudCmdSet() (*cmdSet, error) {
 						openIndex := strings.Index(selectedProj, `(`)
 						closeIndex := strings.Index(selectedProj, `)`)
 						if openIndex != -1 && closeIndex != -1 && openIndex < closeIndex {
-							cc.GcloudProjectName = selectedProj[openIndex+1 : closeIndex]
+							c.GcloudProjectName = selectedProj[openIndex+1 : closeIndex]
 						} else {
 							return errors.New("Invalid project name")
 						}
@@ -118,61 +119,60 @@ func (cc *ClusterConfig) initGCloudCmdSet() (*cmdSet, error) {
 						return errors.New("Invalid project name")
 					}
 				} else {
-					return cmd.stderr
+					return cmd.Stderr
 				}
 				return nil
 			},
 		},
 		{
-			name:    "create-storage-bucket-soucecode",
-			rootCmd: "gsutil",
-			args:    []string{"mb", "-c", "COLDLINE", "gs://" + cc.getStorageOpts().SourceCodeBucket},
-			runFn: func(cmd *Command) error {
-				return nil
+			Name:    "create-storage-bucket-soucecode",
+			RootCmd: "gsutil",
+			GenerateArgs: func(c *Cluster) []string {
+				return []string{"mb", "-l", c.Region, "gs://" + c.GetStorageOpts().SourceCodeBucket}
 			},
 		},
 		{
-			name:    "create-storage-bucket-cloudbuild-logs",
-			rootCmd: "gsutil",
-			args:    []string{"mb", "-c", "COLDLINE", "gs://" + cc.getStorageOpts().CloudBuildBucket},
+			Name:    "create-storage-bucket-cloudbuild-logs",
+			RootCmd: "gsutil",
+			GenerateArgs: func(c *Cluster) []string {
+				return []string{"mb", "-l", c.Region, "gs://" + c.GetStorageOpts().CloudBuildBucket}
+			},
 		},
 		{
-			name:    "list-dns-server",
-			rootCmd: "gcloud",
-			generateArgs: func(cc *ClusterConfig) []string {
+			Name:    "list-dns-server",
+			RootCmd: "gcloud",
+			GenerateArgs: func(c *Cluster) []string {
 				return []string{
 					"dns", "record-sets", "list",
-					"--zone", cc.Name,
+					"--zone", c.Name,
 					"--format", "json",
 				}
 			},
-			internal: true,
+			Internal: true,
 		},
 		{
-			name:    "create-dns-zone",
-			rootCmd: "gcloud",
-			generateArgs: func(cc *ClusterConfig) []string {
+			Name:    "create-dns-zone",
+			RootCmd: "gcloud",
+			GenerateArgs: func(c *Cluster) []string {
 				return []string{
 					"dns",
 					"managed-zones", "create",
-					cc.Name,
-					"--dns-name", cc.DNSName,
-					"--project", cc.GcloudProjectName,
+					c.Name,
+					"--dns-name", c.DNSName,
+					"--project", c.GcloudProjectName,
 					"--description", "kubepaas managed zone",
 				}
 			},
-			runFn: func(cmd *Command) error {
-				if cmd.succeed {
-					printDNSServers(gcloudCmds, cc)
-					return nil
+			RunFn: func(cmd *Command) error {
+				dnsListCmd, err := gcloudCmds.GetCommand("list-dns-server")
+				if err != nil {
+					return err
 				}
-
-				if strings.Contains(cmd.stderr.Error(), "already exists") {
-					printDNSServers(gcloudCmds, cc)
-					return nil
+				err = printDNSServers(dnsListCmd, c)
+				if err != nil {
+					return err
 				}
-
-				return cmd.stderr
+				return nil
 			},
 		},
 	}
@@ -184,19 +184,16 @@ func (cc *ClusterConfig) initGCloudCmdSet() (*cmdSet, error) {
 	return gcloudCmds, nil
 }
 
-func printDNSServers(gcs *cmdSet, cc *ClusterConfig) error {
-	dnsCmd, err := gcs.getCommand("list-dns-server")
-	if err != nil {
-		return err
-	}
-	dnsCmd.execute(context.Background(), cc)
-	if !dnsCmd.succeed {
-		return dnsCmd.stderr
+func printDNSServers(dnsListCmd Command, c *Cluster) error {
+
+	dnsListCmd.Execute(context.Background(), c)
+	if !dnsListCmd.Succeed {
+		return dnsListCmd.Stderr
 	}
 
 	var dnsRecords DNSRecords
 	var DNSServerAddrs string
-	err = json.NewDecoder(strings.NewReader(dnsCmd.stdout)).Decode(&dnsRecords)
+	err := json.NewDecoder(strings.NewReader(dnsListCmd.Stdout)).Decode(&dnsRecords)
 	if err != nil {
 		return err
 	}
@@ -210,16 +207,27 @@ func printDNSServers(gcs *cmdSet, cc *ClusterConfig) error {
 			DNSServerAddrs = strings.Join(rec.Rrdatas, "\n")
 		}
 	}
+	color.HiYellow("Add following nameserver to domain-name registar of your domain-name provider:")
+	color.HiWhite(DNSServerAddrs)
 
-	fmt.Println(DNSServerAddrs)
-	return nil
+	added := false
+	for {
+		err = survey.Ask(questions.DNSNameServerConfimation, &added)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		if added {
+			return nil
+		}
+	}
 }
 
 func CreateServiceAccount(name string) error {
 	cmd := Command{
-		name:    "create-service-account",
-		rootCmd: "gcloud",
-		args: []string{
+		Name:    "create-service-account",
+		RootCmd: "gcloud",
+		Args: []string{
 			"iam",
 			"service-accounts",
 			"create",
@@ -229,9 +237,9 @@ func CreateServiceAccount(name string) error {
 		},
 	}
 
-	cmd.execute(context.Background(), nil)
-	if !cmd.succeed {
-		return cmd.stderr
+	cmd.Execute(context.Background(), nil)
+	if !cmd.Succeed {
+		return cmd.Stderr
 	}
 
 	return nil
@@ -239,17 +247,17 @@ func CreateServiceAccount(name string) error {
 
 func BindServiceAccToBucket(serviceAccount, bucket, permission string) error {
 	cmd := Command{
-		name:    "bind-service-account-to-bucket",
-		rootCmd: "gsutil",
-		args: []string{
+		Name:    "bind-service-account-to-bucket",
+		RootCmd: "gsutil",
+		Args: []string{
 			"iam", "ch", "serviceAccount:" + serviceAccount + ":" + permission,
 			"gs://" + bucket,
 		},
 	}
 
-	cmd.execute(context.Background(), nil)
-	if !cmd.succeed {
-		return cmd.stderr
+	cmd.Execute(context.Background(), nil)
+	if !cmd.Succeed {
+		return cmd.Stderr
 	}
 
 	return nil
@@ -257,9 +265,9 @@ func BindServiceAccToBucket(serviceAccount, bucket, permission string) error {
 
 func BindServiceAccountToRole(gcloudProject, serviceAccount, role string) error {
 	cmd := Command{
-		name:    "bind-service-account",
-		rootCmd: "gcloud",
-		args: []string{
+		Name:    "bind-service-account",
+		RootCmd: "gcloud",
+		Args: []string{
 			"projects",
 			"add-iam-policy-binding",
 			gcloudProject,
@@ -269,9 +277,9 @@ func BindServiceAccountToRole(gcloudProject, serviceAccount, role string) error 
 		},
 	}
 
-	cmd.execute(context.Background(), nil)
-	if !cmd.succeed {
-		return cmd.stderr
+	cmd.Execute(context.Background(), nil)
+	if !cmd.Succeed {
+		return cmd.Stderr
 	}
 
 	return nil
@@ -279,18 +287,18 @@ func BindServiceAccountToRole(gcloudProject, serviceAccount, role string) error 
 
 func GenerateServiceAccountKey(serviceAccount, path string) error {
 	cmd := Command{
-		name:    "generate-service-account-keys",
-		rootCmd: "gcloud",
-		args: []string{
+		Name:    "generate-service-account-keys",
+		RootCmd: "gcloud",
+		Args: []string{
 			"iam", "service-accounts", "keys", "create",
 			"--iam-account", serviceAccount,
 			path,
 		},
 	}
 
-	cmd.execute(context.Background(), nil)
-	if !cmd.succeed {
-		return cmd.stderr
+	cmd.Execute(context.Background(), nil)
+	if !cmd.Succeed {
+		return cmd.Stderr
 	}
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"regexp"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/fatih/color"
 )
 
 var clusterNameQ = survey.Question{
@@ -19,6 +20,14 @@ var clusterNameQ = survey.Question{
 			return errors.New("please enter valid name. Name can contains [ A-Z a-z 1-9 or `-` ]")
 		}
 		return nil
+	},
+}
+
+var dnsNameServerConfirmationQ = survey.Question{
+	Name: "dnsNameServerConfirmation",
+	Prompt: &survey.Confirm{ 
+		Message: color.HiYellowString("Have you added them?"),
+		Default: false,
 	},
 }
 
@@ -47,7 +56,9 @@ func ProjectPrompt(options []string) []*survey.Question {
 	}
 	return append([]*survey.Question{}, &projectPrompt)
 }
-
+ 
 var ClusterName = append([]*survey.Question{}, &clusterNameQ)
 
 var DomainName = append([]*survey.Question{}, &dnsNameQ)
+
+var DNSNameServerConfimation = append([]*survey.Question{}, &dnsNameServerConfirmationQ)
