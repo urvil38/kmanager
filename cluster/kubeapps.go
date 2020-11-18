@@ -199,6 +199,10 @@ func (c *Cluster) valueFromTemplate(app App, templateData string) (string, error
 					Name:  "DNS_NAME",
 					Value: c.DNSName,
 				},
+				{
+					Name: "DNS_TTL",
+					Value: "60",
+				},
 			},
 		}
 		err := c.createNamespace("generator")

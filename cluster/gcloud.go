@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -68,9 +69,21 @@ func (c *Cluster) InitGCloudCmdSet() (*CmdSet, error) {
 					}
 					if ga.Compute.Region != "" {
 						c.Region = ga.Compute.Region
+					} else {
+						region, err := selectRegion()
+						if err != nil {
+							return err
+						}
+						c.Region = region
 					}
 					if ga.Compute.Zone != "" {
 						c.Zone = ga.Compute.Zone
+					} else {
+						zone, err := selectZone(c.Region)
+						if err != nil {
+							return err
+						}
+						c.Zone = zone
 					}
 					if ga.Core.Account != "" {
 						c.Account = ga.Core.Account
@@ -82,10 +95,11 @@ func (c *Cluster) InitGCloudCmdSet() (*CmdSet, error) {
 			},
 		},
 		{
-			Name:     "gcloud-login",
-			RootCmd:  "gcloud",
-			Args:     []string{"auth", "login"},
-			Internal: true,
+			Name:        "gcloud-login",
+			RootCmd:     "gcloud",
+			Args:        []string{"auth", "login"},
+			Internal:    true,
+			InterActive: true,
 		},
 		{
 			Name:    "list-gcloud-accounts",
@@ -184,6 +198,62 @@ func (c *Cluster) InitGCloudCmdSet() (*CmdSet, error) {
 	return gcloudCmds, nil
 }
 
+func selectRegion() (string, error) {
+	cmd := Command{
+		Name:    "list-region",
+		RootCmd: "gcloud",
+		Args: []string{
+			"compute", "regions", "list",
+			"--format", "value(selfLink.scope())",
+		},
+	}
+
+	var options []string
+	var selectedRegion string
+	cmd.Execute(context.Background(), nil)
+	if !cmd.Succeed {
+		return "", cmd.Stderr
+	}
+
+	options = strings.Split(strings.TrimRight(cmd.Stdout, "\n"), "\n")
+	err := survey.Ask(questions.RegionPrompt(options), &selectedRegion, survey.WithValidator(survey.Required))
+	if err != nil {
+		return "", err
+	}
+
+	return selectedRegion, nil
+}
+
+func selectZone(selectedRegion string) (string, error) {
+	cmd := Command{
+		Name:    "list-zone",
+		RootCmd: "gcloud",
+		Args: []string{
+			"compute", "zones", "list",
+			"--format", "value(selfLink.scope())",
+			"--filter", fmt.Sprintf("name~'%s'", selectedRegion),
+			"--sort-by=name",
+		},
+	}
+
+	var options []string
+	var selectedZone string
+	cmd.Execute(context.Background(), nil)
+	if !cmd.Succeed {
+		fmt.Print(cmd.Stderr)
+		os.Exit(1)
+		return "", cmd.Stderr
+	}
+
+	options = strings.Split(strings.TrimRight(cmd.Stdout, "\n"), "\n")
+	err := survey.Ask(questions.ZonePrompt(options), &selectedZone, survey.WithValidator(survey.Required))
+	if err != nil {
+		return "", err
+	}
+
+	return selectedZone, nil
+}
+
 func printDNSServers(dnsListCmd Command, c *Cluster) error {
 
 	dnsListCmd.Execute(context.Background(), c)
@@ -207,7 +277,7 @@ func printDNSServers(dnsListCmd Command, c *Cluster) error {
 			DNSServerAddrs = strings.Join(rec.Rrdatas, "\n")
 		}
 	}
-	color.HiYellow("Add following nameserver to domain-name registar of your domain-name provider:")
+	color.HiYellow("This zone will not normally be usable until you register the related domain and configure following records with your registrar")
 	color.HiWhite(DNSServerAddrs)
 
 	added := false

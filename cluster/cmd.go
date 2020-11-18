@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -17,6 +18,7 @@ type Command struct {
 	Stderr       error
 	Stdout       string
 	Internal     bool
+	InterActive  bool
 	Succeed      bool
 	GenerateArgs func(cc *Cluster) []string
 	RunFn        func(cmd *Command) error
@@ -27,9 +29,25 @@ func (c *Command) Execute(ctx context.Context, cc *Cluster) {
 	if c.GenerateArgs != nil {
 		c.Args = c.GenerateArgs(cc)
 	}
-	c.Stdout, c.Stderr = RunCommand(ctx, c.RootCmd, c.Args...)
-	if c.Stderr == nil {
-		c.Succeed = true
+
+	if c.InterActive {
+		cmd := exec.CommandContext(ctx, c.RootCmd, c.Args...)
+		cmd.Stderr = os.Stderr
+		cmd.Stdout = os.Stdout
+		cmd.Stdin = os.Stdin
+
+		err := cmd.Run()
+		if err != nil {
+			c.Stderr = err
+		} else {
+			c.Succeed = true
+		}
+
+	} else {
+		c.Stdout, c.Stderr = RunCommand(ctx, c.RootCmd, c.Args...)
+		if c.Stderr == nil {
+			c.Succeed = true
+		}
 	}
 
 	if c.RunFn != nil {

@@ -16,6 +16,7 @@ func (c *Cluster) InitKubeCmdSet() (*CmdSet, error) {
 			GenerateArgs: func(c *Cluster) []string {
 				return []string{
 					"container", "clusters", "create", c.Name,
+					"--project", c.GcloudProjectName,
 					"--zone", c.Zone,
 					"--no-enable-basic-auth",
 					"--cluster-version", "1.16.13-gke.401",
@@ -142,12 +143,10 @@ func (c *Cluster) kubectlRunAndWait(filePath string, appName string) error {
 						break outer
 					default:
 						checkCmd.Execute(context.Background(), c)
-						if !checkCmd.Succeed {
-							//fmt.Print(checkCmd.Stderr)
-							time.Sleep(5 * time.Second)
-							continue
+						if checkCmd.Succeed {
+							break outer
 						}
-						break outer
+						time.Sleep(5 * time.Second)
 					}
 				}
 			} else {
@@ -159,8 +158,7 @@ func (c *Cluster) kubectlRunAndWait(filePath string, appName string) error {
 
 	applyCmd.Execute(context.Background(), c)
 	if !applyCmd.Succeed {
-		//fmt.Println(applyCmd.Stderr)
-		return applyCmd.Stderr
+		fmt.Println(applyCmd.Stderr)
 	}
 	return nil
 }
@@ -174,7 +172,6 @@ func (c *Cluster) createNamespace(name string) error {
 
 	nsCmd.Execute(context.Background(), c)
 	if !nsCmd.Succeed {
-		//fmt.Println(nsCmd.Stderr)
 		return nsCmd.Stderr
 	}
 	return nil

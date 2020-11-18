@@ -46,7 +46,7 @@ func newDeleteCmd() *cobra.Command {
 				o.ClusterName = args[0]
 				err := deleteCluster(*o)
 				if err != nil {
-					cmd.PrintErrln(err)
+					cmd.PrintErrln("Oops, got error while deleting cluster:", err)
 					os.Exit(1)
 				}
 			}
@@ -71,7 +71,9 @@ func validate(args []string, usage string) error {
 
 func deleteCluster(o DeleteOptions) error {
 	cc, err := cluster.Get(o.ClusterName)
-	if err != nil {
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("No config file found of cluster named \"%s\"", o.ClusterName)
+	} else if err != nil {
 		return err
 	}
 

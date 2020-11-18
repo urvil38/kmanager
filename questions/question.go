@@ -56,6 +56,28 @@ func ProjectPrompt(options []string) []*survey.Question {
 	}
 	return append([]*survey.Question{}, &projectPrompt)
 }
+
+func RegionPrompt(options []string) []*survey.Question {
+	regionPrompt := survey.Question{
+		Name: "region",
+		Prompt: &survey.Select{
+			Message: "Choose region:",
+			Options: options,
+		},
+	}
+	return append([]*survey.Question{}, &regionPrompt)
+}
+
+func ZonePrompt(options []string) []*survey.Question {
+	zonePrompt := survey.Question{
+		Name: "zone",
+		Prompt: &survey.Select{
+			Message: "Choose zone:",
+			Options: options,
+		},
+	}
+	return append([]*survey.Question{}, &zonePrompt)
+}
  
 var ClusterName = append([]*survey.Question{}, &clusterNameQ)
 
