@@ -79,7 +79,7 @@ func (c *Cluster) ConfigKubernetes() error {
 		}
 
 		configFilePath := filepath.Join(kConfigDir, fmt.Sprintf("%s.yaml", app.Name))
-		err = ioutil.WriteFile(configFilePath, []byte(cData), 0777)
+		err = ioutil.WriteFile(configFilePath, []byte(cData), 0666)
 		if err != nil {
 			return err
 		}
@@ -200,7 +200,7 @@ func (c *Cluster) valueFromTemplate(app App, templateData string) (string, error
 					Value: c.DNSName,
 				},
 				{
-					Name: "DNS_TTL",
+					Name:  "DNS_TTL",
 					Value: "60",
 				},
 			},

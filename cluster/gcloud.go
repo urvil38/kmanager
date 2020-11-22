@@ -50,7 +50,7 @@ func (c *Cluster) InitGCloudCmdSet() (*CmdSet, error) {
 			Name:    "check-gcloud-login",
 			RootCmd: "gcloud",
 			Args:    []string{"config", "list", "--format", "json"},
-			RunFn: func(cmd *Command) error {
+			AfterFn: func(cmd *Command) error {
 				if cmd.Succeed {
 					var ga GcloudAccount
 					err := json.NewDecoder(strings.NewReader(cmd.Stdout)).Decode(&ga)
@@ -105,7 +105,7 @@ func (c *Cluster) InitGCloudCmdSet() (*CmdSet, error) {
 			Name:    "list-gcloud-accounts",
 			RootCmd: "gcloud",
 			Args:    []string{"projects", "list", "--filter", "lifecycleState:ACTIVE", "--format", "json"},
-			RunFn: func(cmd *Command) error {
+			AfterFn: func(cmd *Command) error {
 				if cmd.Succeed {
 					var pl ProjectList
 					err := json.NewDecoder(strings.NewReader(cmd.Stdout)).Decode(&pl)
@@ -177,7 +177,7 @@ func (c *Cluster) InitGCloudCmdSet() (*CmdSet, error) {
 					"--description", "kubepaas managed zone",
 				}
 			},
-			RunFn: func(cmd *Command) error {
+			AfterFn: func(cmd *Command) error {
 				dnsListCmd, err := gcloudCmds.GetCommand("list-dns-server")
 				if err != nil {
 					return err

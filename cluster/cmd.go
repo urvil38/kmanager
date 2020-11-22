@@ -20,8 +20,8 @@ type Command struct {
 	Internal     bool
 	InterActive  bool
 	Succeed      bool
-	GenerateArgs func(cc *Cluster) []string
-	RunFn        func(cmd *Command) error
+	GenerateArgs func(*Cluster) []string
+	AfterFn      func(*Command) error
 }
 
 func (c *Command) Execute(ctx context.Context, cc *Cluster) {
@@ -50,8 +50,8 @@ func (c *Command) Execute(ctx context.Context, cc *Cluster) {
 		}
 	}
 
-	if c.RunFn != nil {
-		c.RunFn(c)
+	if c.AfterFn != nil {
+		c.AfterFn(c)
 	}
 }
 

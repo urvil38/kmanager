@@ -117,7 +117,7 @@ func (c *Cluster) kubectlRunAndWait(filePath string, appName string) error {
 		Name:    "create-kubernetes-resources",
 		RootCmd: "kubectl",
 		Args:    []string{"create", "-f", filePath},
-		RunFn: func(cmd *Command) error {
+		AfterFn: func(cmd *Command) error {
 			if !cmd.Succeed {
 				return cmd.Stderr
 			}
