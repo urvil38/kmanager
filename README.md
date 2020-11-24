@@ -43,7 +43,7 @@ Use "kmanager [command] --help" for more information about a command.
 
 ```
 # download binary using cURL
-$ curl -L https://github.com/urvil38/kmanager/releases/download/3.0.1/kmanager-darwin-amd64 -o kmanager
+$ curl -L https://github.com/urvil38/kmanager/releases/download/0.0.1/kmanager-darwin-amd64 -o kmanager
 
 # make binary executable
 $ chmod +x ./kmanager
