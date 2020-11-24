@@ -2,17 +2,36 @@ package cmd
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
+const (
+	banner = 
+`
+     __                                              
+    / /______ ___  ____ _____  ____ _____ ____  _____
+   / //_/ __ '__ \/ __ '/ __ \/ __ '/ __ '/ _ \/ ___/
+  / ,< / / / / / / /_/ / / / / /_/ / /_/ /  __/ /    
+ /_/|_/_/ /_/ /_/\__,_/_/ /_/\__,_/\__, /\___/_/     
+                                  /____/             
+					
+`
+)
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "kmanager",
-	Short: "A brief description of your application",
+	Short: "Cluster Manager of KubePAAS platform",
+	Run: func(cmd *cobra.Command, args []string) {
+		printBanner()
+		cmd.Help()
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -22,6 +41,12 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func printBanner() {
+	rand.Seed(time.Now().UnixNano())
+	colorCounter := rand.Intn(7)
+	fmt.Printf("\x1b[1;3%dm%v\x1b[0m", colorCounter+1, banner)
 }
 
 func init() {

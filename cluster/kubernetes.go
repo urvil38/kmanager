@@ -19,7 +19,6 @@ func (c *Cluster) InitKubeCmdSet() (*CmdSet, error) {
 					"--project", c.GcloudProjectName,
 					"--zone", c.Zone,
 					"--no-enable-basic-auth",
-					"--cluster-version", "1.16.13-gke.401",
 					"--machine-type", "n1-standard-1",
 					"--image-type", "COS",
 					"--disk-type", "pd-standard",
