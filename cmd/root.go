@@ -53,30 +53,21 @@ func init() {
 	kubectlCmd := exec.Command("kubectl", "version", "--client", "--short")
 
 	err := kubectlCmd.Run()
-	if err != nil {
+	if err != nil || kubectlCmd.Stderr != nil {
 		color.Red("Seems like you don't have \"kubectl\" installed on your computer!")
 		color.HiYellow("=> Installation Guide: https://kubernetes.io/docs/tasks/tools/install-kubectl")
-		os.Exit(1)
-	}
-
-	if kubectlCmd.Stderr != nil {
-		color.Red("Seems like you don't have \"kubectl\" installed on your computer!")
-		color.HiYellow("=> Installation Guide: https://kubernetes.io/docs/tasks/tools/install-kubectl")
-		os.Exit(1)
 	}
 
 	gcloudCmd := exec.Command("gcloud", "--version")
 
 	err = gcloudCmd.Run()
-	if err != nil {
-		color.Red("Seems like you don't have google cloud sdk (gcloud) installed on your computer!")
+	if err != nil || gcloudCmd.Stderr != nil {
+		color.Red("Seems like you don't have \"google cloud sdk\" (gcloud) installed on your computer!")
 		color.HiYellow("=> Installation Guide: https://cloud.google.com/sdk/docs/install")
+	}
+
+	if err != nil || kubectlCmd.Stderr != nil || gcloudCmd.Stderr != nil {
 		os.Exit(1)
 	}
 
-	if gcloudCmd.Stderr != nil {
-		color.Red("Seems like you don't have google cloud sdk (gcloud) installed on your computer!")
-		color.HiYellow("=> Installation Guide: https://cloud.google.com/sdk/docs/install")
-		os.Exit(1)
-	}
 }
