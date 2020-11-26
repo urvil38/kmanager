@@ -1,6 +1,6 @@
 # kmanager
 
-Kmanager is a Command Line Tool(CLI) to help manage a kubernetes cluster on GCP to host web app using [KubePAAS](https://github.com/urvil38/kubepaas).
+Kmanager is a Command Line Tool(CLI) to help manage a kubernetes cluster and other cloud resources on GCP to host webapp using [KubePAAS](https://github.com/urvil38/kubepaas).
 
 #### Requirements:
 
