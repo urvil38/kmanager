@@ -29,13 +29,14 @@ Available Commands:
   delete      delete will delete the cluster of given name
   describe    describe print out configuration of given cluster
   help        Help about any command
-  list        List cluster managed by current kmanager
+  list        List cluster managed by kmanager
 
 Flags:
   -h, --help   help for kmanager
 
 Use "kmanager [command] --help" for more information about a command.
 ```
+
 
 # Download
 
@@ -51,6 +52,7 @@ $ chmod +x ./kmanager
 # move it to bin dir (user need to has root privileges. run following command as root user using sudo.
 $ sudo mv ./kmanager /usr/local/bin
 ```
+
 
 - Download using `go get`
 
