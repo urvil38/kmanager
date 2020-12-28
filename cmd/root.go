@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	banner = 
-`
+	banner = `
      __                                              
     / /______ ___  ____ _____  ____ _____ ____  _____
    / //_/ __ '__ \/ __ '/ __ \/ __ '/ __ '/ _ \/ ___/
@@ -30,7 +29,7 @@ var rootCmd = &cobra.Command{
 	Short: "Cluster Manager of KubePAAS platform",
 	Run: func(cmd *cobra.Command, args []string) {
 		printBanner()
-		cmd.Help()
+		_ = cmd.Help()
 	},
 }
 

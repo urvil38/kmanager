@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/urvil38/kmanager/cluster"
 	"github.com/urvil38/kmanager/config"
 	"github.com/urvil38/kmanager/questions"
-	"github.com/AlecAivazis/survey/v2"
 
 	"github.com/spf13/cobra"
 )

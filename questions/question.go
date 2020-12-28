@@ -25,7 +25,7 @@ var clusterNameQ = survey.Question{
 
 var dnsNameServerConfirmationQ = survey.Question{
 	Name: "dnsNameServerConfirmation",
-	Prompt: &survey.Confirm{ 
+	Prompt: &survey.Confirm{
 		Message: color.HiYellowString("Have you added them?"),
 		Default: false,
 	},
@@ -78,9 +78,9 @@ func ZonePrompt(options []string) []*survey.Question {
 	}
 	return append([]*survey.Question{}, &zonePrompt)
 }
- 
+
 var ClusterName = append([]*survey.Question{}, &clusterNameQ)
 
 var DomainName = append([]*survey.Question{}, &dnsNameQ)
 
-var DNSNameServerConfimation = append([]*survey.Question{}, &dnsNameServerConfirmationQ)
+var DNSNameServerConfirmation = append([]*survey.Question{}, &dnsNameServerConfirmationQ)

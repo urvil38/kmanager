@@ -120,36 +120,22 @@ func (c *Cluster) InitGCloudCmdSet() (*CmdSet, error) {
 					}
 
 					var selectedProj string
-					survey.Ask(questions.ProjectPrompt(projectsOpts), &selectedProj, survey.WithValidator(survey.Required))
+					_ = survey.Ask(questions.ProjectPrompt(projectsOpts), &selectedProj, survey.WithValidator(survey.Required))
 					if selectedProj != "" {
-						openIndex := strings.Index(selectedProj, `(`)
-						closeIndex := strings.Index(selectedProj, `)`)
-						if openIndex != -1 && closeIndex != -1 && openIndex < closeIndex {
-							c.GcloudProjectName = selectedProj[openIndex+1 : closeIndex]
+						oi := strings.Index(selectedProj, `(`)
+						ci := strings.Index(selectedProj, `)`)
+						if oi != -1 && ci != -1 && oi < ci {
+							c.GcloudProjectName = selectedProj[oi+1 : ci]
 						} else {
-							return errors.New("Invalid project name")
+							return errors.New("invalid project name")
 						}
 					} else {
-						return errors.New("Invalid project name")
+						return errors.New("invalid project name")
 					}
 				} else {
 					return cmd.Stderr
 				}
 				return nil
-			},
-		},
-		{
-			Name:    "create-storage-bucket-soucecode",
-			RootCmd: "gsutil",
-			GenerateArgs: func(c *Cluster) []string {
-				return []string{"mb", "-l", c.Region, "gs://" + c.GetStorageOpts().SourceCodeBucket}
-			},
-		},
-		{
-			Name:    "create-storage-bucket-cloudbuild-logs",
-			RootCmd: "gsutil",
-			GenerateArgs: func(c *Cluster) []string {
-				return []string{"mb", "-l", c.Region, "gs://" + c.GetStorageOpts().CloudBuildBucket}
 			},
 		},
 		{
@@ -189,10 +175,24 @@ func (c *Cluster) InitGCloudCmdSet() (*CmdSet, error) {
 				return nil
 			},
 		},
+		{
+			Name:    "create-storage-bucket-soucecode",
+			RootCmd: "gsutil",
+			GenerateArgs: func(c *Cluster) []string {
+				return []string{"mb", "-l", c.Region, "gs://" + c.GetStorageOpts().SourceCodeBucket}
+			},
+		},
+		{
+			Name:    "create-storage-bucket-cloudbuild-logs",
+			RootCmd: "gsutil",
+			GenerateArgs: func(c *Cluster) []string {
+				return []string{"mb", "-l", c.Region, "gs://" + c.GetStorageOpts().CloudBuildBucket}
+			},
+		},
 	}
 
 	for _, cmd := range cmds {
-		gcloudCmds.AddCmd(cmd)
+		_ = gcloudCmds.AddCmd(cmd)
 	}
 
 	return gcloudCmds, nil
@@ -282,7 +282,7 @@ func printDNSServers(dnsListCmd Command, c *Cluster) error {
 
 	added := false
 	for {
-		err = survey.Ask(questions.DNSNameServerConfimation, &added)
+		err = survey.Ask(questions.DNSNameServerConfirmation, &added)
 		if err != nil {
 			fmt.Println(err)
 		}

@@ -5,8 +5,7 @@ import (
 	"path/filepath"
 )
 
-const fackCertSecret = 
-`
+const fakeCertSecret = `
 apiVersion: v1
 kind: Secret
 metadata:
@@ -20,7 +19,7 @@ data:
 
 func (c Cluster) CreateFakeSecret() error {
 
-	err := ioutil.WriteFile(filepath.Join(c.ConfPath, "fake_cert_secret.yaml"), []byte(fackCertSecret), 0600)
+	err := ioutil.WriteFile(filepath.Join(c.ConfPath, "fake_cert_secret.yaml"), []byte(fakeCertSecret), 0600)
 	if err != nil {
 		return err
 	}
