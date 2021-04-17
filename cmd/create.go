@@ -78,25 +78,55 @@ func CreateCluster() error {
 		}
 	}
 
-	_ = cluster.CreateServiceAccount(c.GetServiceAccountOpts().DNSName)
+	err = cluster.CreateServiceAccount(c.GetServiceAccountOpts().DNSName)
+	if err != nil {
+		fmt.Println(err)
+	}
 
-	_ = cluster.BindServiceAccountToRole(c.GcloudProjectName, c.GetServiceAccountOpts().DNS, "roles/dns.admin")
+	err = cluster.BindServiceAccountToRole(c.GcloudProjectName, c.GetServiceAccountOpts().DNS, "roles/dns.admin")
+	if err != nil {
+		fmt.Println(err)
+	}
 
-	_ = cluster.CreateServiceAccount(c.GetServiceAccountOpts().StorageName)
+	err = cluster.CreateServiceAccount(c.GetServiceAccountOpts().StorageName)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 
-	_ = cluster.BindServiceAccToBucket(c.GetServiceAccountOpts().Storage, c.GetStorageOpts().SourceCodeBucket, "objectCreator")
+	err = cluster.BindServiceAccToBucket(c.GetServiceAccountOpts().Storage, c.GetStorageOpts().SourceCodeBucket, "objectCreator")
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 
-	_ = cluster.BindServiceAccToBucket(c.GetServiceAccountOpts().Storage, c.GetStorageOpts().CloudBuildBucket, "objectViewer")
+	err = cluster.BindServiceAccToBucket(c.GetServiceAccountOpts().Storage, c.GetStorageOpts().CloudBuildBucket, "objectViewer")
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 
-	_ = cluster.CreateServiceAccount(c.GetServiceAccountOpts().CloudBuildName)
+	err = cluster.CreateServiceAccount(c.GetServiceAccountOpts().CloudBuildName)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 
-	_ = cluster.BindServiceAccountToRole(c.GcloudProjectName, c.GetServiceAccountOpts().CloudBuild, "roles/cloudbuild.builds.editor")
+	err = cluster.BindServiceAccountToRole(c.GcloudProjectName, c.GetServiceAccountOpts().CloudBuild, "roles/cloudbuild.builds.editor")
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 
-	_ = cluster.GenerateServiceAccountKey(c.GetServiceAccountOpts().CloudBuild, filepath.Join(c.ConfPath, c.GetServiceAccountOpts().CloudBuildName+".json"))
+	err = cluster.GenerateServiceAccountKey(c.GetServiceAccountOpts().CloudBuild, filepath.Join(c.ConfPath, c.GetServiceAccountOpts().CloudBuildName+".json"))
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 
-	_ = cluster.GenerateServiceAccountKey(c.GetServiceAccountOpts().Storage, filepath.Join(c.ConfPath, c.GetServiceAccountOpts().StorageName+".json"))
+	err = cluster.GenerateServiceAccountKey(c.GetServiceAccountOpts().Storage, filepath.Join(c.ConfPath, c.GetServiceAccountOpts().StorageName+".json"))
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 
-	_ = cluster.GenerateServiceAccountKey(c.GetServiceAccountOpts().DNS, filepath.Join(c.ConfPath, c.GetServiceAccountOpts().DNSName+".json"))
+	err = cluster.GenerateServiceAccountKey(c.GetServiceAccountOpts().DNS, filepath.Join(c.ConfPath, c.GetServiceAccountOpts().DNSName+".json"))
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 
 	err = c.ConfigKubernetes()
 	if err != nil {

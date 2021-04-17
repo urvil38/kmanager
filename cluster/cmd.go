@@ -1,10 +1,9 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -44,7 +43,7 @@ func (c *Command) Execute(ctx context.Context, cc *Cluster) {
 		}
 
 	} else {
-		c.Stdout, c.Stderr = RunCommand(ctx, c.RootCmd, c.Args...)
+		c.Stdout, c.Stderr = RunCommand(ctx, c.Name, c.RootCmd, c.Args...)
 		if c.Stderr == nil {
 			c.Succeed = true
 		}
@@ -105,54 +104,19 @@ func (cs *CmdSet) AddCmd(cmd Command) error {
 	return nil
 }
 
-func RunCommand(ctx context.Context, name string, args ...string) (output string, err error) {
-	fmt.Println(name + " " + strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, name, args...)
+func RunCommand(ctx context.Context, name, rootCmd string, args ...string) (output string, err error) {
+	fmt.Println(name + ": " + rootCmd + " " + strings.Join(args, " "))
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, rootCmd, args...)
+	cmd.Stderr = &stderr
+	cmd.Stdout = &stdout
 
-	stdout, err := cmd.StdoutPipe()
+	err = cmd.Run()
 	if err != nil {
 		return "", err
 	}
-
-	// scannerStdout := bufio.NewScanner(stdout)
-	// go func() {
-	// 	for scannerStdout.Scan() {
-	// 		fmt.Printf("%s\n", scannerStdout.Text())
-	// 	}
-	// }()
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
+	if stderr.Len() > 0 {
 		return "", err
 	}
-	// scannerStderr := bufio.NewScanner(stdout)
-	// go func() {
-	// 	for scannerStderr.Scan() {
-	// 		fmt.Printf("%s\n", scannerStderr.Text())
-	// 	}
-	// }()
-
-	err = cmd.Start()
-	if err != nil {
-		return "", err
-	}
-
-	stderrorCmd, err := ioutil.ReadAll(stderr)
-	if err != nil {
-		return "", err
-	}
-
-	stdoutCmd, err := ioutil.ReadAll(stdout)
-	if err != nil {
-		return "", err
-	}
-
-	if err := cmd.Wait(); err != nil {
-		if len(stderrorCmd) > 0 {
-			return "", errors.New(string(stderrorCmd))
-		}
-		return "", err
-	}
-
-	return string(stdoutCmd), nil
+	return stdout.String(), nil
 }

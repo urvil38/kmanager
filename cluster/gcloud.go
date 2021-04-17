@@ -269,7 +269,7 @@ func printDNSServers(dnsListCmd Command, c *Cluster) error {
 	}
 
 	if len(dnsRecords) == 0 {
-		return errors.New("the 'parameters.managedZone' resource named does not exists")
+		return errors.New("the 'parameters.managedZone' resource does not exists")
 	}
 
 	for _, rec := range dnsRecords {
